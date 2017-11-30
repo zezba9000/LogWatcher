@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -28,12 +29,23 @@ namespace LogWatcher
 			InitializeComponent();
 		}
 
+		protected override void OnClosing(CancelEventArgs e)
+		{
+			if (watcher != null)
+			{
+				watcher.Dispose();
+				watcher = null;
+			}
+
+			base.OnClosing(e);
+		}
+
 		private void openButton_Click(object sender, RoutedEventArgs e)
 		{
 			const string filename = @"D:\Downloads\test.txt";
 			textBlock.Text = File.ReadAllText(filename);
 
-			watcher = new FileSystemWatcher(System.IO.Path.GetDirectoryName(filename), "*.txt");
+			watcher = new FileSystemWatcher(System.IO.Path.GetDirectoryName(filename), System.IO.Path.GetFileName(filename));
 			watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName;
 			watcher.Changed += new FileSystemEventHandler(OnChanged);
 			watcher.Created += new FileSystemEventHandler(OnChanged);
