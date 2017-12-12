@@ -18,6 +18,20 @@ using System.Windows.Shapes;
 
 namespace LogWatcher
 {
+	class WatchedFile
+	{
+		// IO
+		public string filename;
+		public FileSystemWatcher watcher;
+		public FileStream stream;
+		public StreamReader reader;
+		public long lastPosition;
+
+		// UI
+		public ScrollViewer scrollBar;
+		public TextBlock textBlock;
+	}
+
 	public partial class MainWindow : Window
 	{
 		public MainWindow()
@@ -29,24 +43,46 @@ namespace LogWatcher
 		{
 			foreach (TabItem tab in fileTabControl.Items)
 			{
-				var watcher = (FileSystemWatcher)tab.Tag;
-				if (watcher != null)
+				var watchedFile = (WatchedFile)tab.Tag;
+				if (watchedFile.watcher != null)
 				{
-					watcher.Dispose();
-					watcher = null;
+					watchedFile.watcher.Dispose();
+					watchedFile.watcher = null;
 				}
 			}
 
 			base.OnClosing(e);
 		}
 
-		private string ReadAllText(string filename)
+		private string OpenFile(string filename, out FileStream stream, out StreamReader reader, out long lastPosition)
 		{
-			using (var stream = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-			using (var reader = new StreamReader(stream))
+			stream = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+			reader = new StreamReader(stream);
+			string result = reader.ReadToEnd();
+			lastPosition = stream.Position;
+			return result;
+		}
+
+		private string ReadFile(FileStream stream, StreamReader reader, ref long lastPosition, out bool isRefresh)
+		{
+			isRefresh = false;
+			if (stream.Length < lastPosition || stream.Position < lastPosition)
 			{
-				return reader.ReadToEnd();
+				stream.Position = 0;
+				isRefresh = true;
 			}
+
+			string result = reader.ReadToEnd();
+			lastPosition = stream.Position;
+			return result;
+		}
+
+		private string RefreshReadFile(FileStream stream, StreamReader reader, ref long lastPosition)
+		{
+			stream.Position = 0;
+			string result = reader.ReadToEnd();
+			lastPosition = stream.Position;
+			return result;
 		}
 
 		private void openButton_Click(object sender, RoutedEventArgs e)
@@ -82,9 +118,12 @@ namespace LogWatcher
 				tab.ContextMenu.Items.Add(refreshMenuItem);
 
 				// load file content into tab
+				FileStream stream;
+				StreamReader reader;
+				long lastPosition;
 				try
 				{
-					textBlock.Text = ReadAllText(filename);
+					textBlock.Text = OpenFile(filename, out stream, out reader, out lastPosition);
 				}
 				catch (Exception ex)
 				{
@@ -94,13 +133,29 @@ namespace LogWatcher
 
 				// add file watcher
 				var watcher = new FileSystemWatcher(System.IO.Path.GetDirectoryName(filename), System.IO.Path.GetFileName(filename));
-				watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName;
+				watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.CreationTime | NotifyFilters.CreationTime;
 				watcher.Changed += new FileSystemEventHandler(OnChanged);
 				watcher.Created += new FileSystemEventHandler(OnChanged);
 				watcher.Deleted += new FileSystemEventHandler(OnChanged);
 				watcher.Renamed += new RenamedEventHandler(OnRenamed);
 				watcher.EnableRaisingEvents = true;
-				tab.Tag = watcher;
+
+				// create watched file tag
+				var watchedFile = new WatchedFile()
+				{
+					// IO
+					filename = filename,
+					watcher = watcher,
+					stream = stream,
+					reader = reader,
+					lastPosition = lastPosition,
+
+					// UI
+					scrollBar = scrollBar,
+					textBlock = textBlock
+				};
+
+				tab.Tag = watchedFile;
 
 				// finish
 				fileTabControl.Items.Add(tab);
@@ -115,12 +170,11 @@ namespace LogWatcher
 			var tab = (TabItem)menuItem.Tag;
 			var scrollBar = (ScrollViewer)tab.Content;
 			var textBlock = (TextBlock)scrollBar.Content;
-			var watcher = (FileSystemWatcher)tab.Tag;
+			var watchedFile = (WatchedFile)tab.Tag;
 			
 			try
 			{
-				string filename = System.IO.Path.Combine(watcher.Path, watcher.Filter);
-				textBlock.Text = ReadAllText(filename);
+				textBlock.Text = RefreshReadFile(watchedFile.stream, watchedFile.reader, ref watchedFile.lastPosition);
 				scrollBar.ScrollToEnd();
 			}
 			catch (Exception ex)
@@ -134,8 +188,8 @@ namespace LogWatcher
 		{
 			var menuItem = (MenuItem)sender;
 			var tab = (TabItem)menuItem.Tag;
-			var watcher = (FileSystemWatcher)tab.Tag;
-			watcher.Dispose();
+			var watchedFile = (WatchedFile)tab.Tag;
+			watchedFile.watcher.Dispose();
 			fileTabControl.Items.Remove(tab);
 		}
 
@@ -145,11 +199,11 @@ namespace LogWatcher
 			{
 				foreach (TabItem tab in fileTabControl.Items)
 				{
-					if (tab.Tag == sender)
+					var watchedFile = (WatchedFile)tab.Tag;
+					if (watchedFile.watcher == sender)
 					{
 						var scrollBar = (ScrollViewer)tab.Content;
 						var textBlock = (TextBlock)scrollBar.Content;
-						var watcher = (FileSystemWatcher)tab.Tag;
 
 						try
 						{
@@ -158,11 +212,19 @@ namespace LogWatcher
 								textBlock.Text = "<< DELETED >>";
 							}
 
-							if ((e.ChangeType & WatcherChangeTypes.Changed) != 0 || (e.ChangeType & WatcherChangeTypes.Created) != 0)
+							if ((e.ChangeType & WatcherChangeTypes.Created) != 0)
+							{
+								textBlock.Text = RefreshReadFile(watchedFile.stream, watchedFile.reader, ref watchedFile.lastPosition);
+								scrollBar.ScrollToEnd();
+							}
+
+							if ((e.ChangeType & WatcherChangeTypes.Changed) != 0)
 							{
 								if (File.Exists(e.FullPath))
 								{
-									textBlock.Text = ReadAllText(e.FullPath);
+									string result = ReadFile(watchedFile.stream, watchedFile.reader, ref watchedFile.lastPosition, out bool isRefresh);
+									if (isRefresh) textBlock.Text = result;
+									else textBlock.Text += result;
 									scrollBar.ScrollToEnd();
 								}
 							}
@@ -184,19 +246,19 @@ namespace LogWatcher
 			{
 				foreach (TabItem tab in fileTabControl.Items)
 				{
-					if (tab.Tag == sender)
+					var watchedFile = (WatchedFile)tab.Tag;
+					if (watchedFile.watcher == sender)
 					{
 						var scrollBar = (ScrollViewer)tab.Content;
 						var textBlock = (TextBlock)scrollBar.Content;
-						var watcher = (FileSystemWatcher)tab.Tag;
 
 						try
 						{
 							if ((e.ChangeType & WatcherChangeTypes.Renamed) != 0)
 							{
 								string newFileName = e.FullPath;
-								watcher.Path = System.IO.Path.GetDirectoryName(newFileName);
-								watcher.Filter = System.IO.Path.GetFileName(newFileName);
+								watchedFile.watcher.Path = System.IO.Path.GetDirectoryName(newFileName);
+								watchedFile.watcher.Filter = System.IO.Path.GetFileName(newFileName);
 								tab.Header = System.IO.Path.GetFileName(newFileName);
 							}
 						}
