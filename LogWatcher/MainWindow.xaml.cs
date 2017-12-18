@@ -175,6 +175,7 @@ namespace LogWatcher
 			// create text block
 			var scrollBar = new ScrollViewer();
 			var textBox = new TextBox();
+			textBox.IsReadOnly = true;
 			scrollBar.Content = textBox;
 			tab.Content = scrollBar;
 
