@@ -23,6 +23,8 @@ bld/
 [Oo]bj/
 [Bb]uilds/
 [Bb]uild/
+Log Watcher-SetupFiles/
+Log Watcher-cache/
 
 # Visual Studio 2015 cache/options directory
 .vs/
