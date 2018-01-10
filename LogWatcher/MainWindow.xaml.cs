@@ -2,19 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace LogWatcher
@@ -92,6 +83,7 @@ namespace LogWatcher
 		{
 			// dispose and add open tabs to settings
 			timer.Stop();
+			settings.tabs.Clear();
 			foreach (TabItem tab in fileTabControl.Items)
 			{
 				var watchedFile = (WatchedFile)tab.Tag;
@@ -170,7 +162,7 @@ namespace LogWatcher
 			// create tab
 			var tab = new TabItem();
 			tab.ContextMenu = new ContextMenu();
-			tab.Header = System.IO.Path.GetFileName(filename);
+			tab.Header = Path.GetFileName(filename);
 
 			// create text block
 			var scrollBar = new ScrollViewer();
@@ -199,6 +191,23 @@ namespace LogWatcher
 			refreshMenuItem.Header = "Refresh";
 			refreshMenuItem.Click += RefreshMenuItem_Click;
 			tab.ContextMenu.Items.Add(refreshMenuItem);
+
+			// add seperator
+			tab.ContextMenu.Items.Add(new Separator());
+
+			// add open context menu
+			var openMenuItem = new MenuItem();
+			openMenuItem.Tag = tab;
+			openMenuItem.Header = "Open";
+			openMenuItem.Click += OpenMenuItem_Click;
+			tab.ContextMenu.Items.Add(openMenuItem);
+
+			// add open location context menu
+			var openLocationMenuItem = new MenuItem();
+			openLocationMenuItem.Tag = tab;
+			openLocationMenuItem.Header = "Open Location";
+			openLocationMenuItem.Click += OpenLocationMenuItem_Click;
+			tab.ContextMenu.Items.Add(openLocationMenuItem);
 
 			// load file content into tab
 			FileStream stream;
@@ -256,6 +265,26 @@ namespace LogWatcher
 			{
 				AddTab(dlg.FileName);
 			}
+		}
+
+		private void OpenMenuItem_Click(object sender, RoutedEventArgs e)
+		{
+			var menuItem = (MenuItem)sender;
+			var tab = (TabItem)menuItem.Tag;
+			var scrollBar = (ScrollViewer)tab.Content;
+			var textBox = (TextBox)scrollBar.Content;
+			var watchedFile = (WatchedFile)tab.Tag;
+			Process.Start("explorer.exe", watchedFile.filename);
+		}
+
+		private void OpenLocationMenuItem_Click(object sender, RoutedEventArgs e)
+		{
+			var menuItem = (MenuItem)sender;
+			var tab = (TabItem)menuItem.Tag;
+			var scrollBar = (ScrollViewer)tab.Content;
+			var textBox = (TextBox)scrollBar.Content;
+			var watchedFile = (WatchedFile)tab.Tag;
+			Process.Start("explorer.exe", "/select, " + watchedFile.filename);
 		}
 
 		private void RefreshMenuItem_Click(object sender, RoutedEventArgs e)
