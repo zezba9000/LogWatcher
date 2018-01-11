@@ -11,10 +11,10 @@
     <ROW Property="ARPURLINFOABOUT" Value="https://github.com/zezba9000/LogWatcher"/>
     <ROW Property="CTRLS" Value="2"/>
     <ROW Property="Manufacturer" Value="Andrew Witte"/>
-    <ROW Property="ProductCode" Value="1033:{2BFCA039-EDA2-4C57-AE94-E02DA15CD69E} " Type="16"/>
+    <ROW Property="ProductCode" Value="1033:{3CE4CD7F-7C6D-4602-A19B-F6B905BD16A0} " Type="16"/>
     <ROW Property="ProductLanguage" Value="1033"/>
     <ROW Property="ProductName" Value="Log Watcher"/>
-    <ROW Property="ProductVersion" Value="1.0.2" Type="32"/>
+    <ROW Property="ProductVersion" Value="1.0.3" Type="32"/>
     <ROW Property="RUNAPPLICATION" Value="1" Type="4"/>
     <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND"/>
     <ROW Property="UpgradeCode" Value="{0B39B6E2-C08A-4404-BCCC-23AB92C3CE8E}"/>

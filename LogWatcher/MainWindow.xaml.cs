@@ -169,6 +169,7 @@ namespace LogWatcher
 			var textBox = new TextBox();
 			textBox.IsReadOnly = true;
 			scrollBar.Content = textBox;
+			scrollBar.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
 			tab.Content = scrollBar;
 
 			// add close context menu
