@@ -4,6 +4,10 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
+using System.Net.Mail;
+using System.Net.Mime;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -63,6 +67,46 @@ namespace LogWatcher
 
 			// load app settings
 			settings = Settings.Load();
+
+			// set arg setting overrides
+			bool settingOverrideFound = false;
+			string emailUsername = null, emailPassword = null;
+			foreach (string arg in Environment.GetCommandLineArgs())
+			{
+				var parts = arg.Split('=');
+				if (parts == null || parts.Length != 2) continue;
+
+				settingOverrideFound = true;
+				switch (parts[0].ToLower())
+				{
+					case "-emailto": settings.emailTo = parts[1]; break;
+					case "-emailfrom": settings.emailFrom = parts[1]; break;
+					case "-emailsmtphost": settings.emailSmtpHost = parts[1]; break;
+					case "-emailsmtpport": int.TryParse(parts[1], out settings.emailSmtpPort); break;
+
+					case "-emailusername": emailUsername = parts[1]; break;
+					case "-emailpassword": emailPassword = parts[1]; break;
+
+					case "-tab":
+						if (settings.tabs == null) settings.tabs = new List<string>();
+						settings.tabs.Add(parts[1]);
+						break;
+				}
+			}
+
+			if (!string.IsNullOrEmpty(emailUsername) && !string.IsNullOrEmpty(emailUsername))
+			{
+				Settings.SetWindowsEmailCredentials(emailUsername, emailPassword);
+			}
+
+			if (settingOverrideFound)
+			{
+				Settings.Save(settings);
+				Close();
+				return;
+			}
+
+			// apply settings
 			if (settings.winX != -1)
 			{
 				Left = settings.winX;
@@ -71,6 +115,8 @@ namespace LogWatcher
 				Height = settings.winHeight;
 				if (settings.winMaximized) WindowState = WindowState.Maximized;
 			}
+
+			emailButton.IsEnabled = !string.IsNullOrEmpty(settings.emailTo);
 
 			if (settings.tabs == null) settings.tabs = new List<string>();
 			foreach (string tab in settings.tabs) AddTab(tab);
@@ -110,6 +156,7 @@ namespace LogWatcher
 				var scrollBar = (ScrollViewer)tab.Content;
 				var textBox = (TextBox)scrollBar.Content;
 
+				watchedFile.stream.Flush();
 				long length = watchedFile.stream.Length;
 				if (length != watchedFile.lastStreamLength)
 				{
@@ -136,13 +183,18 @@ namespace LogWatcher
 		private string ReadFile(FileStream stream, StreamReader reader, ref long lastPosition, ref long lastStreamLength, out bool didRefresh)
 		{
 			didRefresh = false;
-			if (stream.Length < lastPosition || stream.Position < lastPosition)
+			long streamLength = stream.Length;
+			if (streamLength < lastPosition || stream.Position < lastPosition)
 			{
+				lastStreamLength = 0;
 				stream.Position = 0;
 				didRefresh = true;
 			}
+			else
+			{
+				lastStreamLength = streamLength;
+			}
 
-			lastStreamLength = stream.Length;
 			string result = reader.ReadToEnd();
 			lastPosition = stream.Position;
 			return result;
@@ -225,7 +277,7 @@ namespace LogWatcher
 			}
 
 			// create file watcher
-			var watcher = new FileSystemWatcher(System.IO.Path.GetDirectoryName(filename), System.IO.Path.GetFileName(filename));
+			var watcher = new FileSystemWatcher(Path.GetDirectoryName(filename), Path.GetFileName(filename));
 			watcher.NotifyFilter = NotifyFilters.FileName;// NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size;
 			//watcher.Changed += new FileSystemEventHandler(OnChanged);
 			//watcher.Created += new FileSystemEventHandler(OnChanged);
@@ -393,11 +445,11 @@ namespace LogWatcher
 							{
 								string newFileName = e.FullPath;
 								watchedFile.filename = newFileName;
-								watchedFile.watcher.Path = System.IO.Path.GetDirectoryName(newFileName);
-								watchedFile.watcher.Filter = System.IO.Path.GetFileName(newFileName);
+								watchedFile.watcher.Path = Path.GetDirectoryName(newFileName);
+								watchedFile.watcher.Filter = Path.GetFileName(newFileName);
 								watchedFile.DisposeStream();
 								textBox.Text = OpenFile(newFileName, out watchedFile.stream, out watchedFile.reader, out watchedFile.lastPosition, out watchedFile.lastStreamLength);
-								tab.Header = System.IO.Path.GetFileName(newFileName);
+								tab.Header = Path.GetFileName(newFileName);
 							}
 						}
 						catch (Exception ex)
@@ -431,6 +483,71 @@ namespace LogWatcher
 					}
 				}
 			});
+		}
+
+		private void settingsButton_Click(object sender, RoutedEventArgs e)
+		{
+			var settingsWindow = new SettingsWindow(settings);
+			settingsWindow.Owner = this;
+			settingsWindow.ShowDialog();
+			emailButton.IsEnabled = !string.IsNullOrEmpty(settings.emailTo);
+		}
+
+		private void emailButton_Click(object sender, RoutedEventArgs e)
+		{
+			// get stmp user / pass
+			if (!Settings.GetWindowsEmailCredentials(out string username, out string password))
+			{
+				MessageBox.Show(this, "Failed to get stmp user/pass", "Error");
+				return;
+			}
+
+			try
+			{
+				// copy logs to temp path
+				string tmpFolder = Path.Combine(Path.GetTempPath(), "LogWatcherLogs");
+				if (!Directory.Exists(tmpFolder)) Directory.CreateDirectory(tmpFolder);
+				foreach (TabItem tab in fileTabControl.Items)
+				{
+					var watchedFile = (WatchedFile)tab.Tag;
+					string dst = Path.Combine(tmpFolder, Path.GetFileName(watchedFile.filename));
+					File.Copy(watchedFile.filename, dst, true);
+				}
+
+				// zip logs
+				string zipFilePath = Path.Combine(Path.GetTempPath(), "LogWatcherLogs.zip");
+				if (File.Exists(zipFilePath))
+				{
+					File.Delete(zipFilePath);
+					System.Threading.Thread.Sleep(1000);
+				}
+
+				ZipFile.CreateFromDirectory(tmpFolder, zipFilePath);
+
+				// setup sender
+				var message = new MailMessage();
+				message.To.Add(settings.emailTo);
+				message.From = new MailAddress(settings.emailFrom);
+				message.Subject = "LogWatcher Logs";
+				var now = DateTime.Now;
+				message.Body = string.Format("Logs sent on LOCAL '{0}' -- UTC '{1}'", now, now.ToUniversalTime());
+
+				// add attachment
+				var attachment = new Attachment(zipFilePath);
+				message.Attachments.Add(attachment);
+
+				var smtp = new SmtpClient(settings.emailSmtpHost, settings.emailSmtpPort);
+				smtp.EnableSsl = true;
+				smtp.Credentials = new NetworkCredential(username, password);
+				smtp.Send(message);
+			}
+			catch (Exception ex)
+			{
+				MessageBox.Show(this, "Failed to email logs: " + ex.Message, "Error");
+				return;
+			}
+
+			MessageBox.Show(this, "Logs sent!");
 		}
 	}
 }

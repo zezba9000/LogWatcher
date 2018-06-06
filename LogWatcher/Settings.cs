@@ -1,4 +1,5 @@
-﻿using LogWatcher.XML;
+﻿using CredentialManagement;
+using LogWatcher.XML;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,19 +10,28 @@ namespace LogWatcher
 {
 	namespace XML
 	{
-		public class CustomErrorCodes
+		/*public class CustomErrorCodes
 		{
 			[XmlElement("ErrorCode")] public List<string> errorCodes = new List<string>();
-		}
+		}*/
 
 		[XmlRoot("AppSettings")]
 		public class AppSettings
 		{
+			// window placement
 			[XmlAttribute("WinMaximized")] public bool winMaximized = false;
 			[XmlAttribute("WinX")] public int winX = -1;
 			[XmlAttribute("WinY")] public int winY = -1;
 			[XmlAttribute("WinWidth")] public int winWidth = -1;
 			[XmlAttribute("WinHeight")] public int winHeight = -1;
+
+			// email
+			[XmlAttribute("EmailTo")] public string emailTo;
+			[XmlAttribute("EmailFrom")] public string emailFrom;
+			[XmlAttribute("EmailSmtpHost")] public string emailSmtpHost;
+			[XmlAttribute("EmailSmtpPort")] public int emailSmtpPort;
+
+			// tabs
 			[XmlElement("Tab")] public List<string> tabs;
 		}
 	}
@@ -29,6 +39,7 @@ namespace LogWatcher
 	public static class Settings
 	{
 		private static readonly string appSettingsFilename;
+		private const string emailCredentialTarget = "LogWatcherCreds";
 
 		static Settings()
 		{
@@ -80,6 +91,48 @@ namespace LogWatcher
 			}
 
 			return true;
+		}
+
+		public static bool SetWindowsEmailCredentials(string username, string password)
+		{
+			using (var creds = new Credential())
+			{
+				creds.Target = emailCredentialTarget;
+				creds.Username = username;
+				creds.Password = password;
+				creds.PersistanceType = PersistanceType.LocalComputer;
+				return creds.Save();
+			}
+		}
+
+		public static bool GetWindowsEmailCredentials(out string username, out string password)
+		{
+			using (var creds = new Credential())
+			{
+				creds.Target = emailCredentialTarget;
+				creds.PersistanceType = PersistanceType.LocalComputer;
+				if (creds.Load())
+				{
+					username = creds.Username;
+					password = creds.Password;
+					return true;
+				}
+				else
+				{
+					username = null;
+					password = null;
+					return false;
+				}
+			}
+		}
+
+		public static bool RemoveWindowsEmailCredentials()
+		{
+			using (var creds = new Credential())
+			{
+				creds.Target = emailCredentialTarget;
+				return creds.Delete();
+			}
 		}
 	}
 }
