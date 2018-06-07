@@ -7,7 +7,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Mail;
-using System.Net.Mime;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -89,7 +88,7 @@ namespace LogWatcher
 
 					case "-tab":
 						if (settings.tabs == null) settings.tabs = new List<string>();
-						settings.tabs.Add(parts[1]);
+						if (!settings.tabs.Contains(parts[1])) settings.tabs.Add(parts[1]);
 						break;
 				}
 			}
