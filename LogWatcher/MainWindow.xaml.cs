@@ -7,6 +7,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Mail;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -500,53 +501,75 @@ namespace LogWatcher
 				MessageBox.Show(this, "Failed to get stmp user/pass", "Error");
 				return;
 			}
-
-			try
+			
+			// buffer filenames
+			var filenames = new List<string>();
+			foreach (TabItem tab in fileTabControl.Items)
 			{
-				// copy logs to temp path
-				string tmpFolder = Path.Combine(Path.GetTempPath(), "LogWatcherLogs");
-				if (!Directory.Exists(tmpFolder)) Directory.CreateDirectory(tmpFolder);
-				foreach (TabItem tab in fileTabControl.Items)
-				{
-					var watchedFile = (WatchedFile)tab.Tag;
-					string dst = Path.Combine(tmpFolder, Path.GetFileName(watchedFile.filename));
-					File.Copy(watchedFile.filename, dst, true);
-				}
-
-				// zip logs
-				string zipFilePath = Path.Combine(Path.GetTempPath(), "LogWatcherLogs.zip");
-				if (File.Exists(zipFilePath))
-				{
-					File.Delete(zipFilePath);
-					System.Threading.Thread.Sleep(1000);
-				}
-
-				ZipFile.CreateFromDirectory(tmpFolder, zipFilePath);
-
-				// setup sender
-				var message = new MailMessage();
-				message.To.Add(settings.emailTo);
-				message.From = new MailAddress(settings.emailFrom);
-				message.Subject = "LogWatcher Logs";
-				var now = DateTime.Now;
-				message.Body = string.Format("Logs sent on LOCAL '{0}' -- UTC '{1}'", now, now.ToUniversalTime());
-
-				// add attachment
-				var attachment = new Attachment(zipFilePath);
-				message.Attachments.Add(attachment);
-
-				var smtp = new SmtpClient(settings.emailSmtpHost, settings.emailSmtpPort);
-				smtp.EnableSsl = true;
-				smtp.Credentials = new NetworkCredential(username, password);
-				smtp.Send(message);
-			}
-			catch (Exception ex)
-			{
-				MessageBox.Show(this, "Failed to email logs: " + ex.Message, "Error");
-				return;
+				var watchedFile = (WatchedFile)tab.Tag;
+				filenames.Add(watchedFile.filename);
 			}
 
-			MessageBox.Show(this, "Logs sent!");
+			// multi-thread method
+			void SendEmail()
+			{
+				try
+				{
+					// copy logs to temp path
+					string tmpFolder = Path.Combine(Path.GetTempPath(), "LogWatcherLogs");
+					if (!Directory.Exists(tmpFolder)) Directory.CreateDirectory(tmpFolder);
+					foreach (string filename in filenames)
+					{
+						string dst = Path.Combine(tmpFolder, Path.GetFileName(filename));
+						File.Copy(filename, dst, true);
+					}
+
+					// zip logs
+					string zipFilePath = Path.Combine(Path.GetTempPath(), "LogWatcherLogs.zip");
+					if (File.Exists(zipFilePath))
+					{
+						File.Delete(zipFilePath);
+						Thread.Sleep(1000);
+					}
+
+					ZipFile.CreateFromDirectory(tmpFolder, zipFilePath);
+
+					// setup sender
+					var message = new MailMessage();
+					message.To.Add(settings.emailTo);
+					message.From = new MailAddress(settings.emailFrom);
+					message.Subject = "LogWatcher Logs";
+					var now = DateTime.Now;
+					message.Body = string.Format("Logs sent on LOCAL '{0}' -- UTC '{1}'", now, now.ToUniversalTime());
+
+					// add attachment
+					var attachment = new Attachment(zipFilePath);
+					message.Attachments.Add(attachment);
+
+					var smtp = new SmtpClient(settings.emailSmtpHost, settings.emailSmtpPort);
+					smtp.EnableSsl = true;
+					smtp.Credentials = new NetworkCredential(username, password);
+					smtp.Send(message);
+				}
+				catch (Exception ex)
+				{
+					Dispatcher.Invoke(delegate()
+					{
+						MessageBox.Show(this, "Failed to email logs: " + ex.Message, "Error");
+					});
+				}
+				finally
+				{
+					Dispatcher.Invoke(delegate()
+					{
+						overlayGrid.Visibility = Visibility.Hidden;
+					});
+				}
+			}
+
+			overlayGrid.Visibility = Visibility.Visible;
+			var thread = new Thread(SendEmail);
+			thread.Start();
 		}
 	}
 }
