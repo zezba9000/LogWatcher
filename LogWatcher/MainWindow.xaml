@@ -5,14 +5,14 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:LogWatcher"
         mc:Ignorable="d"
-        Title="Log Watcher v1.0.5" Height="350" Width="525">
+        Title="Log Watcher v1.0.6" Height="350" Width="525">
 	<Grid>
 		<Grid Background="#BBBBBB">
-			<Button Width="32" Height="32" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="10" ToolTip="Settings" Click="settingsButton_Click">
+			<Button Width="20" Height="20" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,170,10" ToolTip="Settings" Click="settingsButton_Click">
 				<Image Source="settings.png"/>
 			</Button>
 
-			<TabControl Name="fileTabControl" Margin="10,47,10,35"/>
+			<TabControl Name="fileTabControl" Margin="10,10,10,35"/>
 			<Button Name="emailButton" Content="Email Logs" HorizontalAlignment="Right" Margin="0,0,90,10" VerticalAlignment="Bottom" Width="75" Click="emailButton_Click"/>
 			<Button Name="openButton" Content="Open" HorizontalAlignment="Right" Margin="0,0,10,10" VerticalAlignment="Bottom" Width="75" Click="openButton_Click"/>
 			<CheckBox Name="autoScroll" Content="Auto Scroll" HorizontalAlignment="Left" Margin="10,0,0,10" VerticalAlignment="Bottom" IsChecked="True"/>
